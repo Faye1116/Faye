@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>练习 - 黑白背单词</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+    <div class="practice-header">
+        <span class="mode-label" id="modeLabel">随机练习</span>
+        <span class="progress-indicator" id="progressIndicator">1 / 50</span>
+    </div>
+    <div class="question-card">
+        <div class="question-text" id="questionText">loading</div>
+        <div class="question-sub" id="questionSub">选择正确的释义</div>
+        <div class="options-grid" id="optionsGrid"></div>
+
+        <div class="example-block hidden" id="practiceExampleBlock">
+            <div class="example-en" id="practiceExampleEn"></div>
+            <div class="example-cn" id="practiceExampleCn"></div>
+        </div>
+    </div>
+    <div id="feedbackArea" class="feedback-area hidden">
+        <div class="feedback-title">正确答案</div>
+        <div class="feedback-text" id="feedbackText"></div>
+    </div>
+    <div class="action-bar">
+        <div class="action-left">
+            <a href="index.html" class="icon-btn" style="text-decoration: none;">← 返回</a>
+            <button class="icon-btn" id="addWrongBtn">✚ 错题</button>
+            <button class="icon-only-btn" id="speakSmallBtn" title="播放发音">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+            </button>
+        </div>
+        <button class="btn btn-small" id="nextQuestionBtn">下一题 →</button>
+    </div>
+
+    <!-- 统计弹窗 -->
+    <div id="resultModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-title">🎉 练习完成</div>
+            <div class="modal-stats-text" id="modalStatsText">答对 0 题 / 共 0 题</div>
+            <div class="modal-rate-text" id="modalRateText">正确率 0%</div>
+            <button class="btn" id="modalCloseBtn" style="background: #111; color: #fff;">关闭并返回首页</button>
+        </div>
+    </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentMode = urlParams.get('mode') || 'random';
+    const currentDirection = urlParams.get('dir') || 'en2cn';
+
+    let currentQuestions = [];
+    let currentIndex = 0;
+    let answered = false;
+    let correctCount = 0;
+    let correctAnswerText = '';
+
+    function initPractice() {
+        let sourceList = [...BASE_WORD_BANK];
+
+        if (currentMode === 'wrong') {
+            const wrongWords = new Set();
+            wrongSet.forEach(id => {
+                const found = BASE_WORD_BANK.find(w => w.id === id) || ALL_VOCAB_WORDS.find(w => w.id === id);
+                if (found) wrongWords.add(found.word);
+            });
+            sourceList = BASE_WORD_BANK.filter(w => wrongWords.has(w.word));
+            if (sourceList.length === 0) { alert('错题集为空，请先练习并加入错题。'); window.location.href = 'index.html'; return; }
+            shuffleArray(sourceList); sourceList = sourceList.slice(0, 50);
+        } else {
+            shuffleArray(sourceList);
+            let picked = sourceList.slice(0, 50);
+            if (currentMode === 'random') {
+                sourceList = picked;
+            } else if (currentMode === 'sequential') {
+                const originalIndexMap = new Map();
+                BASE_WORD_BANK.forEach((item, index) => originalIndexMap.set(item.id, index));
+                sourceList = picked.sort((a, b) => originalIndexMap.get(a.id) - originalIndexMap.get(b.id));
+            }
+        }
+
+        currentQuestions = sourceList.map(item => ({ ...item }));
+        document.getElementById('modeLabel').textContent = { random: '随机练习', sequential: '顺序练习', wrong: '错题集' }[currentMode] || '练习';
+        renderQuestion();
+    }
+
+    function renderQuestion() {
+        const practiceExampleBlock = document.getElementById('practiceExampleBlock');
+        const feedbackArea = document.getElementById('feedbackArea');
+        practiceExampleBlock.classList.add('hidden');
+        feedbackArea.classList.add('hidden');
+
+        if (!currentQuestions.length || currentIndex >= currentQuestions.length) {
+            showResultModal();
+            return;
+        }
+
+        const q = currentQuestions[currentIndex];
+        answered = false;
+        document.getElementById('progressIndicator').textContent = `${currentIndex + 1} / ${currentQuestions.length}`;
+
+        if (currentDirection === 'en2cn') {
+            document.getElementById('questionText').textContent = q.word;
+            document.getElementById('questionSub').textContent = `选择正确的释义  (${q.pos})`;
+        } else {
+            document.getElementById('questionText').textContent = q.meaning;
+            document.getElementById('questionSub').textContent = `选择正确的英文单词`;
+        }
+        document.getElementById('speakSmallBtn').onclick = () => speakWord(q.word);
+
+        const correctText = currentDirection === 'en2cn' ? q.meaning : q.word;
+        let distractors = []; const usedTexts = new Set([correctText]);
+        const otherItems = BASE_WORD_BANK.filter(item => item.id !== q.id);
+        while (distractors.length < 3 && otherItems.length > 0) {
+            const ri = Math.floor(Math.random() * otherItems.length);
+            const cand = otherItems[ri];
+            const cText = currentDirection === 'en2cn' ? cand.meaning : cand.word;
+            if (!usedTexts.has(cText)) { usedTexts.add(cText); distractors.push(cText); otherItems.splice(ri, 1); }
+        }
+        while (distractors.length < 3) distractors.push('无选项');
+
+        let allOptions = [correctText, ...distractors]; shuffleArray(allOptions);
+        const correctIndex = allOptions.indexOf(correctText);
+        correctAnswerText = correctText;
+
+        const optionsGrid = document.getElementById('optionsGrid');
+        optionsGrid.innerHTML = '';
+        allOptions.forEach((optText, idx) => {
+            const div = document.createElement('div');
+            div.className = 'option-item';
+            div.innerHTML = `<span>${optText}</span><span class="check-icon"></span>`;
+            div.addEventListener('click', () => handleOptionClick(idx, correctIndex, q, allOptions));
+            optionsGrid.appendChild(div);
+        });
+
+        const nextQuestionBtn = document.getElementById('nextQuestionBtn');
+        nextQuestionBtn.textContent = currentIndex === currentQuestions.length - 1 ? '完成' : '下一题 →';
+
+        const addWrongBtn = document.getElementById('addWrongBtn');
+        if (wrongSet.has(q.id)) { addWrongBtn.classList.add('active'); addWrongBtn.innerHTML = '✓ 已加入'; }
+        else { addWrongBtn.classList.remove('active'); addWrongBtn.innerHTML = '✚ 错题'; }
+    }
+
+    function handleOptionClick(clickedIdx, correctIdx, questionItem, allOptions) {
+        if (answered) return;
+        answered = true;
+        const optionEls = document.querySelectorAll('.option-item');
+        optionEls.forEach(el => el.classList.remove('selected', 'correct', 'wrong'));
+
+        optionEls[clickedIdx].classList.add('selected');
+        const isCorrect = (clickedIdx === correctIdx);
+        const feedbackArea = document.getElementById('feedbackArea');
+        const addWrongBtn = document.getElementById('addWrongBtn');
+
+        if (isCorrect) {
+            optionEls[clickedIdx].classList.add('correct');
+            optionEls[clickedIdx].querySelector('.check-icon').textContent = '✓';
+            feedbackArea.classList.add('hidden');
+            correctCount++;
+        } else {
+            optionEls[clickedIdx].classList.add('wrong');
+            optionEls[clickedIdx].querySelector('.check-icon').textContent = '✗';
+            optionEls[correctIdx].classList.add('correct');
+            optionEls[correctIdx].querySelector('.check-icon').textContent = '✓';
+            feedbackArea.classList.remove('hidden');
+
+            const q = questionItem;
+            let correctDisplay = currentDirection === 'en2cn' ? `${q.word} (${q.pos}) —— ${q.meaning}` : `${q.meaning} —— ${q.word}`;
+            document.getElementById('feedbackText').innerHTML = `<strong>正确答案：</strong>${correctAnswerText}<br><span style="color:#555;font-size:0.9rem;">${correctDisplay}</span>`;
+
+            if (!wrongSet.has(q.id)) { wrongSet.add(q.id); saveWrongSet(); addWrongBtn.classList.add('active'); addWrongBtn.innerHTML = '✓ 已加入'; }
+        }
+
+        document.getElementById('practiceExampleEn').textContent = questionItem.example;
+        document.getElementById('practiceExampleCn').textContent = questionItem.exampleMeaning;
+        document.getElementById('practiceExampleBlock').classList.remove('hidden');
+    }
+
+    document.getElementById('addWrongBtn').onclick = () => {
+        if (!currentQuestions.length || currentIndex >= currentQuestions.length) return;
+        const q = currentQuestions[currentIndex];
+        const addWrongBtn = document.getElementById('addWrongBtn');
+        if (wrongSet.has(q.id)) { wrongSet.delete(q.id); addWrongBtn.classList.remove('active'); addWrongBtn.innerHTML = '✚ 错题'; }
+        else { wrongSet.add(q.id); addWrongBtn.classList.add('active'); addWrongBtn.innerHTML = '✓ 已加入'; }
+        saveWrongSet();
+    };
+
+    document.getElementById('nextQuestionBtn').onclick = () => {
+        if (!currentQuestions.length) return;
+        if (currentIndex >= currentQuestions.length - 1) {
+            showResultModal();
+            return;
+        }
+        currentIndex++; renderQuestion();
+    };
+
+    function showResultModal() {
+        let total = currentQuestions.length;
+        if (total === 0) return;
+        const rate = ((correctCount / total) * 100).toFixed(1);
+        document.getElementById('modalStatsText').innerHTML = `答对 <span style="color:#10b981;font-weight:800">${correctCount}</span> 题 / 共 ${total} 题`;
+        document.getElementById('modalRateText').textContent = `正确率 ${rate}%`;
+        document.getElementById('resultModal').classList.remove('hidden');
+    }
+
+    document.getElementById('modalCloseBtn').onclick = () => {
+        window.location.href = 'index.html';
+    };
+
+    // 页面加载后自动初始化
+    initPractice();
+</script>
+</body>
+</html>
