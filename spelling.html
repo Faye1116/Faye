@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>单词拼写 - 黑白背单词</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+    <div class="practice-header">
+        <span class="mode-label">单词拼写</span>
+        <span class="progress-indicator" id="spellingProgress">1 / 50</span>
+    </div>
+
+    <div class="question-card" style="padding: 40px 24px;">
+        <!-- 释义 -->
+        <div class="question-sub" style="margin-bottom: 20px; font-size: 1.1rem; color: #111;" id="spellingMeaning"></div>
+
+        <!-- 拼写输入区域 -->
+        <div class="spelling-hint" id="spellingHint">
+            <!-- 动态生成 -->
+        </div>
+
+        <!-- 例句区域 -->
+        <div class="example-block hidden" id="spellingExampleBlock" style="margin-top: 30px;">
+            <div class="example-en" id="spellingExampleEn"></div>
+            <div class="example-cn" id="spellingExampleCn"></div>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <div class="action-left">
+            <a href="index.html" class="icon-btn" style="text-decoration: none;">← 返回</a>
+            <button class="icon-btn" id="spellingAddWrongBtn">✚ 错题</button>
+            <button class="icon-only-btn" id="spellingSpeakBtn" title="播放发音">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+            </button>
+        </div>
+        <button class="btn btn-small" id="submitSpellingBtn" style="flex:1; max-width: 200px;">提交答案</button>
+    </div>
+
+    <!-- 统计弹窗 -->
+    <div id="resultModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-title">🎉 拼写完成</div>
+            <div class="modal-stats-text" id="modalStatsText">答对 0 题 / 共 0 题</div>
+            <div class="modal-rate-text" id="modalRateText">正确率 0%</div>
+            <button class="btn" id="modalCloseBtn" style="background: #111; color: #fff;">关闭并返回首页</button>
+        </div>
+    </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+    let spellingQuestions = [];
+    let currentSpellingIndex = 0;
+    let correctCount = 0;
+
+    function startSpellingPractice() {
+        // 避免 undefined 导致报错，做一下保护
+        let pool = ALL_VOCAB_WORDS ? [...ALL_VOCAB_WORDS] : [];
+
+        if (pool.length === 0) {
+            document.getElementById('spellingMeaning').textContent = "词库为空或加载失败";
+            return;
+        }
+
+        shuffleArray(pool);
+        let selected = pool.slice(0, 50);
+
+        spellingQuestions = selected.map(wordObj => {
+            const len = wordObj.word.length;
+            let blankCount = 1;
+            if (len > 4 && len <= 7) blankCount = 2;
+            if (len > 7) blankCount = 3;
+
+            let indices = [];
+            while (indices.length < blankCount) {
+                let r = Math.floor(Math.random() * len);
+                if (!indices.includes(r)) indices.push(r);
+            }
+            return { ...wordObj, blankIndices: indices.sort((a,b)=>a-b) };
+        });
+
+        currentSpellingIndex = 0;
+        renderSpellingQuestion();
+    }
+
+    function renderSpellingQuestion() {
+        const submitBtn = document.getElementById('submitSpellingBtn');
+        const addWrongBtn = document.getElementById('spellingAddWrongBtn');
+
+        if (currentSpellingIndex >= spellingQuestions.length) {
+            showResultModal();
+            return;
+        }
+
+        addWrongBtn.classList.remove('hidden');
+        const q = spellingQuestions[currentSpellingIndex];
+        document.getElementById('spellingProgress').textContent = `${currentSpellingIndex + 1} / ${spellingQuestions.length}`;
+        document.getElementById('spellingMeaning').textContent = q.meaning;
+
+        const hintContainer = document.getElementById('spellingHint');
+        hintContainer.innerHTML = '';
+
+        for (let i = 0; i < q.word.length; i++) {
+            if (q.blankIndices.includes(i)) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 1;
+                input.className = 'spelling-input';
+                input.dataset.index = i;
+
+                // 禁用自动填充，防止填一个字母自动填满
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('autocorrect', 'off');
+                input.setAttribute('autocapitalize', 'off');
+                input.setAttribute('spellcheck', 'false');
+
+                input.addEventListener('input', function(e) {
+                    this.value = this.value.replace(/[^a-zA-Z]/g, '').toLowerCase();
+                    const inputs = Array.from(document.querySelectorAll('.spelling-input'));
+                    const currentIdx = inputs.indexOf(this);
+
+                    if (this.value.length === 1 && currentIdx < inputs.length - 1) {
+                        setTimeout(() => {
+                            inputs[currentIdx + 1].focus();
+                        }, 10);
+                    }
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Backspace' && !this.value) {
+                        const inputs = Array.from(document.querySelectorAll('.spelling-input'));
+                        const currentIdx = inputs.indexOf(this);
+                        if (currentIdx > 0) inputs[currentIdx - 1].focus();
+                    }
+                    if (e.key === 'Enter') submitSpelling();
+                });
+
+                hintContainer.appendChild(input);
+            } else {
+                const span = document.createElement('span');
+                span.textContent = q.word[i];
+                hintContainer.appendChild(span);
+            }
+        }
+
+        document.getElementById('spellingExampleBlock').classList.add('hidden');
+        submitBtn.textContent = '提交答案';
+
+        if (wrongSet.has(q.id)) { addWrongBtn.classList.add('active'); addWrongBtn.innerHTML = '✓ 已加入'; }
+        else { addWrongBtn.classList.remove('active'); addWrongBtn.innerHTML = '✚ 错题'; }
+
+        setTimeout(() => {
+            const first = hintContainer.querySelector('.spelling-input');
+            if (first) first.focus();
+        }, 100);
+    }
+
+    function submitSpelling() {
+        if (currentSpellingIndex >= spellingQuestions.length) return;
+        const q = spellingQuestions[currentSpellingIndex];
+        const inputs = document.querySelectorAll('.spelling-input');
+        let allCorrect = true;
+
+        inputs.forEach(input => {
+            const idx = parseInt(input.dataset.index);
+            const expected = q.word[idx];
+            const val = input.value.trim().toLowerCase();
+
+            if (val === expected) {
+                input.classList.remove('wrong');
+                input.classList.add('correct');
+                input.readOnly = true;
+            } else {
+                input.classList.remove('correct');
+                input.classList.add('wrong');
+                input.readOnly = false;
+                allCorrect = false;
+            }
+        });
+
+        document.getElementById('spellingExampleEn').textContent = q.example;
+        document.getElementById('spellingExampleCn').textContent = q.exampleMeaning;
+        document.getElementById('spellingExampleBlock').classList.remove('hidden');
+
+        if (allCorrect) {
+            correctCount++;
+            document.getElementById('submitSpellingBtn').textContent = '回答正确 ✓';
+            setTimeout(() => {
+                currentSpellingIndex++;
+                renderSpellingQuestion();
+            }, 800);
+        } else {
+            document.getElementById('submitSpellingBtn').textContent = '重新提交';
+        }
+    }
+
+    document.getElementById('submitSpellingBtn').onclick = submitSpelling;
+
+    document.getElementById('spellingSpeakBtn').onclick = () => {
+        if (currentSpellingIndex < spellingQuestions.length) speakWord(spellingQuestions[currentSpellingIndex].word);
+    };
+
+    document.getElementById('spellingAddWrongBtn').onclick = () => {
+        if (currentSpellingIndex >= spellingQuestions.length) return;
+        const q = spellingQuestions[currentSpellingIndex];
+        const btn = document.getElementById('spellingAddWrongBtn');
+        if (wrongSet.has(q.id)) {
+            wrongSet.delete(q.id); btn.classList.remove('active'); btn.innerHTML = '✚ 错题';
+        } else {
+            wrongSet.add(q.id); btn.classList.add('active'); btn.innerHTML = '✓ 已加入';
+        }
+        saveWrongSet();
+    };
+
+    function showResultModal() {
+        let total = spellingQuestions.length;
+        if (total === 0) return;
+        const rate = ((correctCount / total) * 100).toFixed(1);
+        document.getElementById('modalStatsText').innerHTML = `答对 <span style="color:#10b981;font-weight:800">${correctCount}</span> 题 / 共 ${total} 题`;
+        document.getElementById('modalRateText').textContent = `正确率 ${rate}%`;
+        document.getElementById('resultModal').classList.remove('hidden');
+    }
+
+    document.getElementById('modalCloseBtn').onclick = () => {
+        window.location.href = 'index.html';
+    };
+
+    startSpellingPractice();
+</script>
+</body>
+</html>

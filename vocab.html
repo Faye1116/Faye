@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>词汇集 - 黑白背单词</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+    <!-- 词汇集来源选择面板 -->
+    <div id="vocabSourcePanel" class="option-panel">
+        <h3>选择附件</h3>
+        <div class="vocab-source-list" id="vocabSourceButtons"></div>
+        <div style="margin-top: 20px; text-align: center;">
+            <a href="index.html" class="icon-btn" style="text-decoration: none; padding: 12px 24px;">← 返回首页</a>
+        </div>
+    </div>
+
+    <!-- 词汇集浏览面板 -->
+    <div id="vocabBrowsePanel" class="hidden">
+        <div class="practice-header">
+            <span class="mode-label" id="vocabSourceLabel">词汇集</span>
+            <span class="progress-indicator" id="vocabProgress">1 / 50</span>
+        </div>
+        <div class="vocab-card" id="vocabCard">
+            <div class="vocab-word" id="vocabWord">abandon</div>
+            <div class="vocab-pos" id="vocabPos">v.</div>
+            <div class="vocab-meaning" id="vocabMeaning">放弃；抛弃</div>
+            <div class="vocab-example-box">
+                <div class="vocab-example-en" id="vocabExampleEn">He decided to abandon the plan.</div>
+                <div class="vocab-example-cn" id="vocabExampleCn">他决定放弃这个计划。</div>
+            </div>
+        </div>
+        <div class="vocab-nav">
+            <button class="btn" id="vocabPrevBtn">← 上一个</button>
+            <span class="vocab-index" id="vocabIndex">1 / 50</span>
+            <button class="btn" id="vocabNextBtn">下一个 →</button>
+        </div>
+        <div style="margin-top: 20px; display: flex; justify-content: center; gap: 16px;">
+            <button class="icon-btn" id="vocabBackListBtn">← 返回列表</button>
+            <a href="index.html" class="icon-btn" style="text-decoration: none;">← 返回首页</a>
+            <button class="icon-only-btn" id="vocabSpeakBtn" title="播放发音">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+    let vocabList = [];
+    let vocabIndex = 0;
+
+    function renderVocabSourceButtons() {
+        const vocabSourceButtons = document.getElementById('vocabSourceButtons');
+        VOCAB_SOURCES.forEach(sourceName => {
+            const btn = document.createElement('button');
+            btn.className = 'btn'; btn.textContent = `📄 ${sourceName}`;
+            btn.addEventListener('click', () => loadVocabCollection(sourceName));
+            vocabSourceButtons.appendChild(btn);
+        });
+    }
+
+    function loadVocabCollection(sourceName) {
+        vocabList = VOCAB_COLLECTIONS[sourceName]; vocabIndex = 0;
+        if (!vocabList || vocabList.length === 0) { alert('该词汇集暂无数据'); return; }
+        document.getElementById('vocabSourcePanel').classList.add('hidden');
+        document.getElementById('vocabBrowsePanel').classList.remove('hidden');
+        document.getElementById('vocabSourceLabel').textContent = sourceName;
+        renderVocabCard();
+    }
+
+    function renderVocabCard() {
+        if (!vocabList.length) return;
+        const q = vocabList[vocabIndex];
+        document.getElementById('vocabWord').textContent = q.word;
+        document.getElementById('vocabPos').textContent = q.pos || '';
+        document.getElementById('vocabMeaning').textContent = q.meaning || '';
+        document.getElementById('vocabExampleEn').textContent = q.example;
+        document.getElementById('vocabExampleCn').textContent = q.exampleMeaning;
+
+        const total = vocabList.length;
+        document.getElementById('vocabProgress').textContent = `${vocabIndex + 1} / ${total}`;
+        document.getElementById('vocabIndex').textContent = `${vocabIndex + 1} / ${total}`;
+
+        const vocabPrevBtn = document.getElementById('vocabPrevBtn');
+        const vocabNextBtn = document.getElementById('vocabNextBtn');
+        vocabPrevBtn.disabled = (vocabIndex === 0);
+        vocabNextBtn.disabled = (vocabIndex === total - 1);
+        vocabPrevBtn.style.opacity = vocabPrevBtn.disabled ? '0.4' : '1';
+        vocabNextBtn.style.opacity = vocabNextBtn.disabled ? '0.4' : '1';
+
+        document.getElementById('vocabSpeakBtn').onclick = () => speakWord(q.word);
+    }
+
+    document.getElementById('vocabPrevBtn').onclick = () => { if (vocabIndex > 0) { vocabIndex--; renderVocabCard(); } };
+    document.getElementById('vocabNextBtn').onclick = () => { if (vocabIndex < vocabList.length - 1) { vocabIndex++; renderVocabCard(); } };
+    document.getElementById('vocabBackListBtn').onclick = () => {
+        document.getElementById('vocabSourcePanel').classList.remove('hidden');
+        document.getElementById('vocabBrowsePanel').classList.add('hidden');
+    };
+
+    renderVocabSourceButtons();
+</script>
+</body>
+</html>

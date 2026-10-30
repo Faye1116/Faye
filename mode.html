@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>选择模式 - 黑白背单词</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+    <div class="option-panel">
+        <div style="text-align: left; margin-bottom: 20px;">
+            <a href="index.html" class="icon-btn" style="text-decoration: none;">← 返回首页</a>
+        </div>
+        <h3>选择模式</h3>
+        <div class="option-buttons" style="margin-top: 20px;">
+            <button class="btn" id="btnCnToEn">中译英</button>
+            <button class="btn" id="btnEnToCn">英译中</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode') || 'random';
+
+    document.getElementById('btnCnToEn').onclick = () => {
+        window.location.href = `practice.html?mode=${mode}&dir=cn2en`;
+    };
+
+    document.getElementById('btnEnToCn').onclick = () => {
+        window.location.href = `practice.html?mode=${mode}&dir=en2cn`;
+    };
+</script>
+</body>
+</html>
