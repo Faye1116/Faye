@@ -36,6 +36,7 @@
         <div class="action-left">
             <a href="index.html" class="icon-btn" style="text-decoration: none;">← 返回</a>
             <button class="icon-btn" id="spellingAddWrongBtn">✚ 错题</button>
+            <button class="icon-btn" id="spellingShowAnswerBtn">👁 查看答案</button>
             <button class="icon-only-btn" id="spellingSpeakBtn" title="播放发音">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
             </button>
@@ -62,8 +63,10 @@
     let spellingQuestions = [];
     let currentSpellingIndex = 0;
     let correctCount = 0;
-    // 记录每道题是否已经答对（用于统计与回看状态）
+    // 记录每道题是否已经答对（用于统计）
     let answeredCorrect = [];
+    // 记录每道题是否已点击“查看答案”（用于回看时恢复例句显示）
+    let answerRevealed = [];
 
     function startSpellingPractice() {
         let pool = ALL_VOCAB_WORDS ? [...ALL_VOCAB_WORDS] : [];
@@ -96,6 +99,7 @@
         });
 
         answeredCorrect = new Array(spellingQuestions.length).fill(false);
+        answerRevealed = new Array(spellingQuestions.length).fill(false);
         currentSpellingIndex = 0;
         renderSpellingQuestion();
     }
@@ -126,7 +130,6 @@
         const hintContainer = document.getElementById('spellingHint');
         hintContainer.innerHTML = '';
 
-        const isAnsweredCorrect = answeredCorrect[currentSpellingIndex];
         const allFilled = q.blankIndices.every(i => q.userInputs[i]);
 
         for (let i = 0; i < q.word.length; i++) {
@@ -145,11 +148,8 @@
                 // 回填已填写的字母
                 if (q.userInputs[i]) input.value = q.userInputs[i];
 
-                // 回填红/绿状态：已答对则绿且只读；未答对但已填满则按对错标色
-                if (isAnsweredCorrect) {
-                    input.classList.add('correct');
-                    input.readOnly = true;
-                } else if (allFilled && q.userInputs[i]) {
+                // 回填红/绿状态（所有输入框始终可编辑，不设 readOnly）
+                if (allFilled && q.userInputs[i]) {
                     const expected = q.word[i];
                     if (q.userInputs[i].toLowerCase() === expected) input.classList.add('correct');
                     else input.classList.add('wrong');
@@ -160,8 +160,8 @@
                     // 同步写入该题记录
                     q.userInputs[i] = this.value || null;
 
+                    // 修改字母后清除旧状态，允许重新判断
                     this.classList.remove('wrong', 'correct');
-                    this.readOnly = false;
                     document.getElementById('spellingExampleBlock').classList.add('hidden');
 
                     const inputs = Array.from(document.querySelectorAll('.spelling-input'));
@@ -189,8 +189,8 @@
             }
         }
 
-        // 已答对的题重新显示例句
-        if (isAnsweredCorrect) {
+        // 根据“是否已查看答案”或“是否答对”决定例句是否显示
+        if (answerRevealed[currentSpellingIndex] || answeredCorrect[currentSpellingIndex]) {
             document.getElementById('spellingExampleEn').textContent = q.example;
             document.getElementById('spellingExampleCn').textContent = q.exampleMeaning;
             document.getElementById('spellingExampleBlock').classList.remove('hidden');
@@ -219,8 +219,6 @@
         const inputs = Array.from(document.querySelectorAll('.spelling-input'));
         // 全部空都已填满才判断
         if (inputs.some(inp => inp.value.trim().length === 0)) return;
-        // 已全部只读（说明已答对并锁定）则跳过
-        if (inputs.every(inp => inp.readOnly)) return;
 
         const q = spellingQuestions[currentSpellingIndex];
         let allCorrect = true;
@@ -242,9 +240,7 @@
         });
 
         if (allCorrect) {
-            // 答对：锁定全部输入框，显示例句，计入正确数
-            inputs.forEach(inp => { inp.readOnly = true; });
-
+            // 答对：显示例句，计入正确数（输入框保持可编辑）
             document.getElementById('spellingExampleEn').textContent = q.example;
             document.getElementById('spellingExampleCn').textContent = q.exampleMeaning;
             document.getElementById('spellingExampleBlock').classList.remove('hidden');
@@ -254,14 +250,25 @@
                 correctCount++;
             }
             // 答对后不自动跳转，等待手动点击“下一题”
-        } else {
-            // 答错：保持可编辑，仅标红，不显示例句，等待用户修改或点击上一题/下一题
-            inputs.forEach(inp => { inp.readOnly = false; });
         }
+        // 答错：保持可编辑，仅标红，不显示例句
     }
 
     document.getElementById('spellingSpeakBtn').onclick = () => {
         if (currentSpellingIndex < spellingQuestions.length) speakWord(spellingQuestions[currentSpellingIndex].word);
+    };
+
+    // 查看答案：显示例句与释义，并播放发音
+    document.getElementById('spellingShowAnswerBtn').onclick = () => {
+        if (currentSpellingIndex >= spellingQuestions.length) return;
+        const q = spellingQuestions[currentSpellingIndex];
+        answerRevealed[currentSpellingIndex] = true;
+
+        document.getElementById('spellingExampleEn').textContent = q.example;
+        document.getElementById('spellingExampleCn').textContent = q.exampleMeaning;
+        document.getElementById('spellingExampleBlock').classList.remove('hidden');
+
+        speakWord(q.word);
     };
 
     document.getElementById('spellingAddWrongBtn').onclick = () => {
@@ -276,7 +283,7 @@
         saveWrongSet();
     };
 
-    // 上一题：回看，保留用户已填内容与状态
+    // 上一题：回看，保留用户已填内容与状态，可继续编辑
     document.getElementById('prevSpellingBtn').onclick = () => {
         if (currentSpellingIndex <= 0) return;
         currentSpellingIndex--;
