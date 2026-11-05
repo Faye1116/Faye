@@ -1,0 +1,9 @@
+name = "faye"
+compatibility_date = "2024-12-01"
+
+# 告诉 Cloudflare 这是纯静态站点，入口是当前目录
+[assets]
+directory = "./"
+
+# 必需的 previews 块
+[previews]
