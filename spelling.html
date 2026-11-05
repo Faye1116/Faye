@@ -14,10 +14,10 @@
     </div>
 
     <div class="question-card" style="padding: 40px 24px;">
-    <!-- 释义 -->
+        <!-- 释义 -->
         <div class="question-sub" style="margin-bottom: 20px; font-size: 1.1rem; color: #111;" id="spellingMeaning"></div>
 
-    <!-- 拼写输入区域 -->
+        <!-- 拼写输入区域 -->
         <div class="spelling-hint" id="spellingHint">
             <!-- 动态生成 -->
         </div>
@@ -87,7 +87,12 @@
                 let r = Math.floor(Math.random() * len);
                 if (!indices.includes(r)) indices.push(r);
             }
-            return { ...wordObj, blankIndices: indices.sort((a, b) => a - b) };
+            return {
+                ...wordObj,
+                blankIndices: indices.sort((a, b) => a - b),
+                // 记录用户已填字母，非空位为 null
+                userInputs: new Array(len).fill(null)
+            };
         });
 
         answeredCorrect = new Array(spellingQuestions.length).fill(false);
@@ -100,8 +105,8 @@
 
         if (currentSpellingIndex >= spellingQuestions.length) {
             showResultModal();
-        return;
-    }
+            return;
+        }
 
         const q = spellingQuestions[currentSpellingIndex];
         document.getElementById('spellingProgress').textContent = `${currentSpellingIndex + 1} / ${spellingQuestions.length}`;
@@ -121,68 +126,92 @@
         const hintContainer = document.getElementById('spellingHint');
         hintContainer.innerHTML = '';
 
+        const isAnsweredCorrect = answeredCorrect[currentSpellingIndex];
+        const allFilled = q.blankIndices.every(i => q.userInputs[i]);
+
         for (let i = 0; i < q.word.length; i++) {
-        if (q.blankIndices.includes(i)) {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.maxLength = 1;
-            input.className = 'spelling-input';
-            input.dataset.index = i;
+            if (q.blankIndices.includes(i)) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 1;
+                input.className = 'spelling-input';
+                input.dataset.index = i;
 
-            input.setAttribute('autocomplete', 'off');
-            input.setAttribute('autocorrect', 'off');
-            input.setAttribute('autocapitalize', 'off');
-            input.setAttribute('spellcheck', 'false');
+                input.setAttribute('autocomplete', 'off');
+                input.setAttribute('autocorrect', 'off');
+                input.setAttribute('autocapitalize', 'off');
+                input.setAttribute('spellcheck', 'false');
 
-            input.addEventListener('input', function () {
-                this.value = this.value.replace(/[^a-zA-Z]/g, '').toLowerCase();
+                // 回填已填写的字母
+                if (q.userInputs[i]) input.value = q.userInputs[i];
 
-                // 用户修改字母时，清除该框的判错/判对状态，允许重新判断
-                this.classList.remove('wrong', 'correct');
-                this.readOnly = false;
-                // 重新编辑后先隐藏例句（若之前答对过又回来改，保持原逻辑：改字母即视为重做）
-                document.getElementById('spellingExampleBlock').classList.add('hidden');
-
-                const inputs = Array.from(document.querySelectorAll('.spelling-input'));
-                const currentIdx = inputs.indexOf(this);
-
-                if (this.value.length === 1 && currentIdx < inputs.length - 1) {
-                    setTimeout(() => { inputs[currentIdx + 1].focus(); }, 10);
+                // 回填红/绿状态：已答对则绿且只读；未答对但已填满则按对错标色
+                if (isAnsweredCorrect) {
+                    input.classList.add('correct');
+                    input.readOnly = true;
+                } else if (allFilled && q.userInputs[i]) {
+                    const expected = q.word[i];
+                    if (q.userInputs[i].toLowerCase() === expected) input.classList.add('correct');
+                    else input.classList.add('wrong');
                 }
-                checkSpellingComplete();
-            });
 
-            input.addEventListener('keydown', function (e) {
-                if (e.key === 'Backspace' && !this.value) {
+                input.addEventListener('input', function () {
+                    this.value = this.value.replace(/[^a-zA-Z]/g, '').toLowerCase();
+                    // 同步写入该题记录
+                    q.userInputs[i] = this.value || null;
+
+                    this.classList.remove('wrong', 'correct');
+                    this.readOnly = false;
+                    document.getElementById('spellingExampleBlock').classList.add('hidden');
+
                     const inputs = Array.from(document.querySelectorAll('.spelling-input'));
                     const currentIdx = inputs.indexOf(this);
-                    if (currentIdx > 0) inputs[currentIdx - 1].focus();
-                }
-            });
 
-            hintContainer.appendChild(input);
-        } else {
-            const span = document.createElement('span');
-            span.textContent = q.word[i];
-            hintContainer.appendChild(span);
+                    if (this.value.length === 1 && currentIdx < inputs.length - 1) {
+                        setTimeout(() => { inputs[currentIdx + 1].focus(); }, 10);
+                    }
+                    checkSpellingComplete();
+                });
+
+                input.addEventListener('keydown', function (e) {
+                    if (e.key === 'Backspace' && !this.value) {
+                        const inputs = Array.from(document.querySelectorAll('.spelling-input'));
+                        const currentIdx = inputs.indexOf(this);
+                        if (currentIdx > 0) inputs[currentIdx - 1].focus();
+                    }
+                });
+
+                hintContainer.appendChild(input);
+            } else {
+                const span = document.createElement('span');
+                span.textContent = q.word[i];
+                hintContainer.appendChild(span);
+            }
         }
+
+        // 已答对的题重新显示例句
+        if (isAnsweredCorrect) {
+            document.getElementById('spellingExampleEn').textContent = q.example;
+            document.getElementById('spellingExampleCn').textContent = q.exampleMeaning;
+            document.getElementById('spellingExampleBlock').classList.remove('hidden');
+        } else {
+            document.getElementById('spellingExampleBlock').classList.add('hidden');
+        }
+
+        if (wrongSet.has(q.id)) { addWrongBtn.classList.add('active'); addWrongBtn.innerHTML = '✓ 已加入'; }
+        else { addWrongBtn.classList.remove('active'); addWrongBtn.innerHTML = '✚ 错题'; }
+
+        // 自动播放单词发音
+        speakWord(q.word);
+
+        // 自动聚焦：优先第一个空位；都填了就聚焦最后一个
+        setTimeout(() => {
+            const inputs = Array.from(hintContainer.querySelectorAll('.spelling-input'));
+            if (!inputs.length) return;
+            const firstEmpty = inputs.find(inp => !inp.value);
+            (firstEmpty || inputs[inputs.length - 1]).focus();
+        }, 100);
     }
-
-    // 例句默认隐藏，答对后显示
-    document.getElementById('spellingExampleBlock').classList.add('hidden');
-
-    if (wrongSet.has(q.id)) { addWrongBtn.classList.add('active'); addWrongBtn.innerHTML = '✓ 已加入'; }
-    else { addWrongBtn.classList.remove('active'); addWrongBtn.innerHTML = '✚ 错题'; }
-
-    // 自动播放单词发音
-    speakWord(q.word);
-
-    // 自动聚焦第一个空
-    setTimeout(() => {
-        const first = hintContainer.querySelector('.spelling-input');
-        if (first) first.focus();
-    }, 100);
-}
 
     // 填满最后一个字母后判断整题
     function checkSpellingComplete() {
@@ -197,22 +226,23 @@
         let allCorrect = true;
 
         inputs.forEach(input => {
-        const idx = parseInt(input.dataset.index);
-        const expected = q.word[idx];
-        const val = input.value.trim().toLowerCase();
+            const idx = parseInt(input.dataset.index);
+            const expected = q.word[idx];
+            const val = input.value.trim().toLowerCase();
+            q.userInputs[idx] = val; // 同步记录
 
-        if (val === expected) {
-            input.classList.remove('wrong');
-            input.classList.add('correct');
-        } else {
-            input.classList.remove('correct');
-            input.classList.add('wrong');
-            allCorrect = false;
-        }
-    });
+            if (val === expected) {
+                input.classList.remove('wrong');
+                input.classList.add('correct');
+            } else {
+                input.classList.remove('correct');
+                input.classList.add('wrong');
+                allCorrect = false;
+            }
+        });
 
         if (allCorrect) {
-            // 答对：锁定全部输入框，显示例句，播放发音，计入正确数
+            // 答对：锁定全部输入框，显示例句，计入正确数
             inputs.forEach(inp => { inp.readOnly = true; });
 
             document.getElementById('spellingExampleEn').textContent = q.example;
@@ -222,9 +252,8 @@
             if (!answeredCorrect[currentSpellingIndex]) {
                 answeredCorrect[currentSpellingIndex] = true;
                 correctCount++;
-        }
-
-        // 答对后不再自动跳转，等待用户手动点击“下一题”
+            }
+            // 答对后不自动跳转，等待手动点击“下一题”
         } else {
             // 答错：保持可编辑，仅标红，不显示例句，等待用户修改或点击上一题/下一题
             inputs.forEach(inp => { inp.readOnly = false; });
@@ -247,7 +276,7 @@
         saveWrongSet();
     };
 
-    // 上一题：回看，可重新作答（清除只读）
+    // 上一题：回看，保留用户已填内容与状态
     document.getElementById('prevSpellingBtn').onclick = () => {
         if (currentSpellingIndex <= 0) return;
         currentSpellingIndex--;
